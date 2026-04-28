@@ -820,20 +820,35 @@ async function searchGoogle(q, page) {
 async function searchBrave(q, page) {
   const key = getBraveKey();
   if (!key) throw new Error('サイドバーでBrave APIキーを設定してください');
-  const lang = document.getElementById('gsLang').value;
-  const params = new URLSearchParams({ q, count: 10, offset: (page-1)*10, ...(lang === 'lang_ja' ? { search_lang: 'ja', country: 'JP' } : lang === 'lang_en' ? { search_lang: 'en' } : {}) });
-  // CORSプロキシ経由でリクエスト（ブラウザからの直接アクセス制限を回避）
+
+  // 最小パラメータのみ（無料プランはlang/country非対応の場合あり）
+  const params = new URLSearchParams({ q, count: '10' });
+  if (page > 1) params.set('offset', String((page - 1) * 10));
+
   const targetUrl = 'https://api.search.brave.com/res/v1/web/search?' + params;
   const proxyUrl  = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+
   const res = await fetch(proxyUrl, {
-    headers: { 'Accept': 'application/json', 'X-Subscription-Token': key }
+    headers: {
+      'Accept': 'application/json',
+      'X-Subscription-Token': key,
+    }
   });
-  if (!res.ok) { const err = await res.json().catch(()=>({})); throw new Error(err.message || `Brave APIエラー (${res.status})`); }
+
+  if (!res.ok) {
+    let detail = '';
+    try { const err = await res.json(); detail = JSON.stringify(err); }
+    catch { detail = await res.text().catch(() => ''); }
+    throw new Error('Brave API (' + res.status + '): ' + detail);
+  }
+
   const data = await res.json();
   gsTotalResults = data.web?.totalCount || 0;
   return (data.web?.results || []).map(item => ({
-    title: item.title, url: item.url, snippet: item.description || '',
-    domain: (() => { try { return new URL(item.url).hostname; } catch { return ''; } })()
+    title:   item.title,
+    url:     item.url,
+    snippet: item.description || '',
+    domain:  (() => { try { return new URL(item.url).hostname; } catch { return ''; } })()
   }));
 }
 
