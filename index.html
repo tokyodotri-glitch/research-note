@@ -227,8 +227,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino San
       <!-- Brave fields -->
       <div class="engine-fields" id="fields-brave">
         <input type="text" class="gcse-input" id="braveKey" placeholder="Brave Search APIキー" />
+        <input type="text" class="gcse-input" id="braveWorker" placeholder="Worker URL (https://xxx.workers.dev)" />
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.5">
-          <a href="https://brave.com/search/api/" target="_blank" style="color:var(--blue)">取得はこちら</a>（無料2,000回/月）
+          APIキー: <a href="https://brave.com/search/api/" target="_blank" style="color:var(--blue)">取得はこちら</a>（無料2,000回/月）<br>
+          Worker: <a href="https://workers.cloudflare.com/" target="_blank" style="color:var(--blue)">Cloudflare Worker</a>が必要（無料）
         </div>
       </div>
       <button class="gcse-save" onclick="saveGcseSettings()">保存</button>
@@ -739,16 +741,18 @@ function selectEngine(engine) {
 }
 
 function loadGcseSettings() {
-  document.getElementById('gcseKey').value  = localStorage.getItem('rn_gcsekey')  || '';
-  document.getElementById('gcseCx').value   = localStorage.getItem('rn_gcsecx')   || '';
-  document.getElementById('braveKey').value = localStorage.getItem('rn_bravekey') || '';
+  document.getElementById('gcseKey').value    = localStorage.getItem('rn_gcsekey')    || '';
+  document.getElementById('gcseCx').value     = localStorage.getItem('rn_gcsecx')     || '';
+  document.getElementById('braveKey').value   = localStorage.getItem('rn_bravekey')   || '';
+  document.getElementById('braveWorker').value = localStorage.getItem('rn_brave_worker') || '';
   selectEngine(currentEngine);
 }
 
 function saveGcseSettings() {
-  localStorage.setItem('rn_gcsekey',  document.getElementById('gcseKey').value.trim());
-  localStorage.setItem('rn_gcsecx',   document.getElementById('gcseCx').value.trim());
-  localStorage.setItem('rn_bravekey', document.getElementById('braveKey').value.trim());
+  localStorage.setItem('rn_gcsekey',      document.getElementById('gcseKey').value.trim());
+  localStorage.setItem('rn_gcsecx',       document.getElementById('gcseCx').value.trim());
+  localStorage.setItem('rn_bravekey',     document.getElementById('braveKey').value.trim());
+  localStorage.setItem('rn_brave_worker', document.getElementById('braveWorker').value.trim());
   const btn = document.querySelector('.gcse-save');
   btn.textContent = '保存しました ✓'; btn.style.background = 'var(--teal)'; btn.style.color = '#fff';
   setTimeout(() => { btn.textContent = '保存'; btn.style.background = ''; btn.style.color = ''; }, 1500);
@@ -825,15 +829,12 @@ async function searchBrave(q, page) {
   const params = new URLSearchParams({ q, count: '10' });
   if (page > 1) params.set('offset', String((page - 1) * 10));
 
-  const targetUrl = 'https://api.search.brave.com/res/v1/web/search?' + params;
-  const proxyUrl  = 'https://corsproxy.io/?' + encodeURIComponent(targetUrl);
+  // Cloudflare WorkerのURL（デプロイ後に設定）
+  const workerUrl = localStorage.getItem('rn_brave_worker') || '';
+  if (!workerUrl) throw new Error('Cloudflare WorkerのURLを設定してください（サイドバー下部）');
 
-  const res = await fetch(proxyUrl, {
-    headers: {
-      'Accept': 'application/json',
-      'X-Subscription-Token': key,
-    }
-  });
+  const targetUrl = 'https://api.search.brave.com/res/v1/web/search?' + params;
+  const res = await fetch(workerUrl + '?' + new URLSearchParams({ url: targetUrl, token: key }));
 
   if (!res.ok) {
     let detail = '';
